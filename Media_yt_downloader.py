@@ -258,7 +258,7 @@ def fetch_best_thumbnail(video_id: str) -> bytes:
 
 def sixseven():
     text = [
-    "     --                                                 ",
+    "    test test nigga test auto update in this program    ",
     "                                                        ",
     "               ?$$$$$$$@'    d$$$$$$$$$$$$$$$           ",
     "             B$$$%qjrp%$m    k$$$$$$$$$$$$$$$           ",
