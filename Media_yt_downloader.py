@@ -489,8 +489,7 @@ def super_fast_downloader():
         elif cmd == '67':
             sixseven()
             continue
-        elif cmd == '123':
-            os.system('cls')
+        elif cmd == '11':
             larp()
             continue
         elif cmd == 'g':
