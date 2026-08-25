@@ -39,6 +39,8 @@ def resolve_ffmpeg() -> str | None:
         preferred_arch = "arm64" if machine in ("arm64", "aarch64") else "x86_64"
         other_arch = "x86_64" if preferred_arch == "arm64" else "arm64"
         candidates = [
+            BASE_DIR / "tools" / "ffmpeg" / "ffmpeg",  # ชุด macOS แบบแยกโฟลเดอร์
+            BASE_DIR / "macOS" / "tools" / "ffmpeg" / "ffmpeg",  # เรียกจาก root
             BASE_DIR / "tools" / "macos" / preferred_arch / "ffmpeg",
             BASE_DIR / "tools" / "macos" / other_arch / "ffmpeg",
             BASE_DIR / "ffmpeg" / "bin" / "ffmpeg",  # โครงสร้างเก่า

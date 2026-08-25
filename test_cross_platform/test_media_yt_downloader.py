@@ -62,8 +62,26 @@ def test_resolve_windows_bundled_ffmpeg():
         module.shutil.which = original_path
 
 
+def test_macos_download_bundle_layout():
+    original_system = module.platform.system
+    original_machine = module.platform.machine
+    original_path = module.shutil.which
+    try:
+        module.platform.system = lambda: "Darwin"
+        module.platform.machine = lambda: "x86_64"
+        module.shutil.which = lambda _: None
+        expected = PROJECT_DIR / "macOS" / "tools" / "ffmpeg" / "ffmpeg"
+        assert expected.is_file()
+        assert module.resolve_ffmpeg() == str(expected)
+    finally:
+        module.platform.system = original_system
+        module.platform.machine = original_machine
+        module.shutil.which = original_path
+
+
 if __name__ == "__main__":
     test_import_and_basic_helpers()
     test_resolve_macos_bundled_ffmpeg()
     test_resolve_windows_bundled_ffmpeg()
+    test_macos_download_bundle_layout()
     print("Cross-platform smoke tests passed")
