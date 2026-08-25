@@ -1,0 +1,19 @@
+# Local Python environments and embedded runtimes
+.venv/
+python-3.14.3-embed-amd64/
+__pycache__/
+*.py[cod]
+
+# Platform-specific binaries and downloaded tool bundles
+tools/windows/ffmpeg/
+tools/macos/*/ffmpeg
+launchers/windows/*.exe
+launchers/windows/*.ico
+get-pip.py
+
+# Keep the organized runtime directories visible in a fresh checkout
+!tools/windows/
+!tools/macos/
+!tools/macos/x86_64/
+!tools/macos/arm64/
+!launchers/windows/

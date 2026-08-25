@@ -22,9 +22,41 @@ except ImportError:
     print("   pip install -r requirements.txt")
     sys.exit(1)
 
-# --- ระบุตำแหน่ง FFMPEG (อิงจากตำแหน่งไฟล์ .py) ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FFMPEG_PATH = os.path.join(BASE_DIR, "ffmpeg", "bin", "ffmpeg.exe")
+# --- ระบุตำแหน่ง FFmpeg แบบข้ามระบบปฏิบัติการ ---
+BASE_DIR = Path(__file__).resolve().parent
+
+
+def resolve_ffmpeg() -> str | None:
+    """ค้นหา FFmpeg จาก tools ของระบบนั้นก่อน แล้วจึงค้นจาก PATH"""
+    system = platform.system()
+    if system == "Windows":
+        candidates = [
+            BASE_DIR / "tools" / "windows" / "ffmpeg" / "bin" / "ffmpeg.exe",
+            BASE_DIR / "ffmpeg" / "bin" / "ffmpeg.exe",  # โครงสร้างเก่า
+        ]
+    elif system == "Darwin":
+        machine = platform.machine().lower()
+        preferred_arch = "arm64" if machine in ("arm64", "aarch64") else "x86_64"
+        other_arch = "x86_64" if preferred_arch == "arm64" else "arm64"
+        candidates = [
+            BASE_DIR / "tools" / "macos" / preferred_arch / "ffmpeg",
+            BASE_DIR / "tools" / "macos" / other_arch / "ffmpeg",
+            BASE_DIR / "ffmpeg" / "bin" / "ffmpeg",  # โครงสร้างเก่า
+        ]
+    else:
+        candidates = [BASE_DIR / "tools" / "linux" / "ffmpeg"]
+
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        candidates.append(Path(system_ffmpeg))
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+FFMPEG_PATH = resolve_ffmpeg()
 
 CYAN   = "\033[96m"
 GREEN  = "\033[92m"
@@ -60,12 +92,16 @@ MODE_INFO = {
 
 
 def open_folder(path: Path):
-    if platform.system() == "Windows":
-        os.system(f'explorer "{path}"')
-    elif platform.system() == "Darwin":
-        os.system(f'open "{path}"')
-    else:
-        os.system(f'xdg-open "{path}"')
+    """เปิดโฟลเดอร์ด้วยโปรแกรมจัดการไฟล์ของแต่ละระบบอย่างปลอดภัย"""
+    try:
+        if platform.system() == "Windows":
+            subprocess.Popen(["explorer", str(path)])
+        elif platform.system() == "Darwin":
+            subprocess.Popen(["open", str(path)])
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
+    except OSError as exc:
+        print(f"❌ Cannot open folder: {exc}")
 
 
 def get_download_path():
@@ -368,16 +404,20 @@ def at_start(current_mode: str, include_audio: bool):
 def super_fast_downloader():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-    if not os.path.exists(FFMPEG_PATH):
-        print(f"❌ FFmpeg not found at: {FFMPEG_PATH}")
+    if not FFMPEG_PATH:
+        print("❌ FFmpeg not found in the project folder or system PATH")
         print()
         print(f"{YELLOW}📥 How to install FFmpeg:{RESET}")
         print("   1. Download 'ffmpeg-release-essentials.zip' from:")
         print("      https://www.gyan.dev/ffmpeg/builds/")
         print("   2. Extract the zip, rename the folder to 'ffmpeg'")
-        print("   3. Place it next to main3.py")
+        print("   3. Place it next to Media_yt_downloader.py")
         print()
-        print(f"   Required structure: {BOLD}<project>/ffmpeg/bin/ffmpeg.exe{RESET}")
+        if platform.system() == "Darwin":
+            print("   macOS: install with 'brew install ffmpeg' or place 'ffmpeg'")
+            print("           at <project>/ffmpeg/bin/ffmpeg (and make it executable)")
+        else:
+            print(f"   Required structure: {BOLD}<project>/tools/windows/ffmpeg/bin/ffmpeg.exe{RESET}")
         return
 
     download_path = get_download_path()
@@ -496,4 +536,3 @@ if __name__ == "__main__":
         super_fast_downloader()
     except KeyboardInterrupt:
         print("\nClosed...")
-
