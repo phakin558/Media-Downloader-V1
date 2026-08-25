@@ -487,7 +487,7 @@ def super_fast_downloader():
             open_folder(get_download_path())
             continue
         elif cmd == '67':
-            sixseven()
+            larp()
             continue
         elif cmd == '11':
             larp()
