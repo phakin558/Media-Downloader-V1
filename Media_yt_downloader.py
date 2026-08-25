@@ -489,7 +489,7 @@ def super_fast_downloader():
         elif cmd == '67':
             sixseven()
             continue
-        elif cmd == 'SPEEDBOOST':
+        elif cmd == '123':
             os.system('cls')
             larp()
             continue
