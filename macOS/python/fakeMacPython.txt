@@ -1,0 +1,7 @@
+นี่เป็นไฟล์ placeholder เท่านั้น
+
+ให้ดาวน์โหลด Portable Python แล้วแตกโฟลเดอร์จริงทับที่:
+macOS/python/
+
+ไฟล์ที่โปรแกรมต้องพบคือ:
+macOS/python/bin/python3

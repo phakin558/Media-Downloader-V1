@@ -7,6 +7,10 @@ __pycache__/
 # Platform-specific binaries and downloaded tool bundles
 tools/windows/ffmpeg/
 tools/macos/*/ffmpeg
+macOS/python/*
+!macOS/python/README.md
+!macOS/python/fakeMacPython.txt
+macOS/.venv/
 launchers/windows/*.exe
 launchers/windows/*.ico
 get-pip.py
