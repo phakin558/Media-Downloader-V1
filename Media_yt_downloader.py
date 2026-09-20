@@ -518,7 +518,7 @@ def at_start(current_mode: str, include_audio: bool, cookie_browser: str | None)
     for line in _downloader:
         print(f"{YELLOW}{line}{RESET}")
     print()
-    print(f"  {DIM}Developed by Phakin Charatsri (GOAT FILM & CS32 KMITL){RESET}")
+    print(f"  {DIM}Developed by Phakin Charatsri (GOAT FILM & CS32 KMITL) | PATCH (20/09/2026){RESET}")
     print()
     print(f"  {DIM}Commands: (Q) Quit | (R) Reset | (F) Open Folder | (Ctrl+V) Paste Link | (67) | (G) GOAT{RESET}")
     print()
