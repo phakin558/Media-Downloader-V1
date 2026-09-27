@@ -138,7 +138,15 @@ MODE_INFO = {
 
 # ---- [COOKIES] browser ที่ใช้ดึง cookies (สลับด้วยคำสั่ง C) ----
 COOKIE_BROWSERS = [None, "chrome", "edge", "firefox", "brave"]
+# ---- [DRIVE] เลือก Drive ที่จะเก็บไฟล์ (สลับด้วยคำสั่ง S) ----
+def get_available_drives() -> list[str]:
+    if platform.system() != "Windows":
+        return ["C"]
+    import string
+    drives = [d for d in string.ascii_uppercase if Path(f"{d}:/").exists()]
+    return drives or ["C"]
 
+AVAILABLE_DRIVES = get_available_drives()
 
 def open_folder(path: Path):
     try:
@@ -152,8 +160,11 @@ def open_folder(path: Path):
         print(f"❌ Cannot open folder: {exc}")
 
 
-def get_download_path() -> Path:
-    p = Path.home() / "Downloads"
+def get_download_path(drive: str = "C") -> Path:
+    if platform.system() == "Windows":
+        p = Path(f"{drive}:/Downloads")
+    else:
+        p = Path.home() / "Downloads"
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -464,7 +475,7 @@ def print_link(url, label=None):
 # ============================================================
 # [UI]
 # ============================================================
-def mode_bar(current_mode: str, include_audio: bool, cookie_browser: str | None):
+def mode_bar(current_mode: str, include_audio: bool, cookie_browser: str | None, current_drive: str):
     def row(num, key):
         info = MODE_INFO[key]
         if key == current_mode:
@@ -480,6 +491,8 @@ def mode_bar(current_mode: str, include_audio: bool, cookie_browser: str | None)
     else:
         js_txt = f"{RED}⚙️  NOT FOUND (downloads may fail){RESET}"
 
+    print(f"     (S) Save to Drive: {GREEN}{current_drive}:\\Downloads{RESET}")   # <-- เพิ่มบรรทัดนี้
+    print()
     print(f"  {BOLD}────────────── Select Mode (Then press Enter) ──────────────{RESET}")
     print(row('1', MODE_M4A))
     print(row('2', MODE_MP4_1080))
@@ -487,13 +500,12 @@ def mode_bar(current_mode: str, include_audio: bool, cookie_browser: str | None)
     print(row('4', MODE_THUMB))
     print(f"  {BOLD}─────────────────────────────────────────────────────────────{RESET}")
     print(f"     (A) sound in Video MP4: {audio_txt}")
-
     print(f"  {BOLD}─────────────────────────────────────────────────────────────{RESET}")
     print(f"  {DIM}  Support Video & Shorts in All mode{RESET}")
     print()
 
 
-def at_start(current_mode: str, include_audio: bool, cookie_browser: str | None):
+def at_start(current_mode: str, include_audio: bool, cookie_browser: str | None, current_drive: str):
     _yt_media = [
         "  ██╗   ██╗  ██████╗  ██╗   ██╗ ████████╗ ██╗   ██╗ ██████╗   ███████╗      ███╗   ███╗ ███████╗ ██████╗  ██╗  █████╗ ",
         "  ╚██╗██╔╝  ██╔═══██╗ ██║   ██║ ╚══██╔══╝ ██║   ██║ ██╔══██╗  ██╔════╝      ████╗ ████║ ██╔════╝ ██╔══██╗ ██║ ██╔══██╗",
@@ -518,12 +530,12 @@ def at_start(current_mode: str, include_audio: bool, cookie_browser: str | None)
     for line in _downloader:
         print(f"{YELLOW}{line}{RESET}")
     print()
-    print(f"  {DIM}Developed by Phakin Charatsri (GOAT FILM & CS32 KMITL) | PATCH (20/09/2026){RESET}")
+    print(f"  {DIM}Developed by Phakin Charatsri (GOAT FILM & CS32 KMITL) | PATCH 27.09.2026.{RESET}")
+    print(f"  [ Patch 27.9.2026 ] - New Feature, you can change Drive Path\n                      for example (Press S Enter to Switch Drive) C: D: ... etc. **in Downloads Folder. ")
     print()
-    print(f"  {DIM}Commands: (Q) Quit | (R) Reset | (F) Open Folder | (Ctrl+V) Paste Link | (67) | (G) GOAT{RESET}")
+    print(f"  {DIM}Commands: (Q) Quit | (R) Reset | (F) Open Folder | (S) Switch Drive | (Ctrl+V) Paste Link | (67) | (G) GOAT{RESET}")
     print()
-    mode_bar(current_mode, include_audio, cookie_browser)
-
+    mode_bar(current_mode, include_audio, cookie_browser, current_drive)
 
 # ============================================================
 # [MAIN]
@@ -546,14 +558,17 @@ def super_fast_downloader():
         else:
             print(f"   Required structure: {BOLD}<project>/tools/windows/ffmpeg/bin/ffmpeg.exe{RESET}")
         return
-
-    download_path = get_download_path()
+    
+    drive_idx = 0
+    current_drive = AVAILABLE_DRIVES[drive_idx]
+    download_path = get_download_path(current_drive)
     current_mode = MODE_MP4_1080
     include_audio = True
     cookie_idx = 0
     cookie_browser = COOKIE_BROWSERS[cookie_idx]
 
-    at_start(current_mode, include_audio, cookie_browser)
+
+    at_start(current_mode, include_audio, cookie_browser, current_drive)
     print(f"{DIM}  Loading modules...{RESET}", end="\r")
     try:
         import yt_dlp  # noqa: F401
@@ -568,7 +583,7 @@ def super_fast_downloader():
 
     def refresh_ui():
         os.system('cls' if os.name == 'nt' else 'clear')
-        at_start(current_mode, include_audio, cookie_browser)
+        at_start(current_mode, include_audio, cookie_browser, current_drive) 
 
     while True:
         info = MODE_INFO[current_mode]
@@ -617,6 +632,12 @@ def super_fast_downloader():
             continue
         elif cmd == '4':
             current_mode = MODE_THUMB
+            refresh_ui()
+            continue
+        elif cmd in ('s', 'ห'):
+            drive_idx = (drive_idx + 1) % len(AVAILABLE_DRIVES)
+            current_drive = AVAILABLE_DRIVES[drive_idx]
+            download_path = get_download_path(current_drive)
             refresh_ui()
             continue
         elif cmd in ('a', 'ฟ'):
