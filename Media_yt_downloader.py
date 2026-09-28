@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -21,6 +22,7 @@ except ImportError:
     sys.exit(1)
 
 BASE_DIR = Path(__file__).resolve().parent
+SETTINGS_FILE = BASE_DIR / "settings.json"
 
 CYAN     = "\033[96m"
 GREEN    = "\033[92m"
@@ -167,6 +169,110 @@ def get_download_path(drive: str = "C") -> Path:
         p = Path.home() / "Downloads"
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+# ============================================================
+# [SETTINGS] บันทึก / โหลดค่าที่ใช้ล่าสุด (settings.json)
+# ============================================================
+DEFAULT_SETTINGS = {
+    "mode": MODE_MP4_1080,
+    "include_audio": True,
+    "cookie_browser": None,
+    "drive": AVAILABLE_DRIVES[0],
+    "custom_path": None,      # None = ใช้ <Drive>:/Downloads
+}
+
+
+def load_settings() -> dict:
+    """โหลด settings.json ถ้าไฟล์ไม่มี/เสีย/ค่าผิด → ใช้ค่าเริ่มต้นแทนเฉพาะช่องนั้น"""
+    settings = dict(DEFAULT_SETTINGS)
+    if not SETTINGS_FILE.is_file():
+        return settings
+    try:
+        data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("settings root must be an object")
+    except (OSError, ValueError) as exc:
+        print(f"{YELLOW}⚠️  settings.json is unreadable ({exc}) → using defaults{RESET}")
+        return settings
+
+    if data.get("mode") in MODE_INFO:
+        settings["mode"] = data["mode"]
+    if isinstance(data.get("include_audio"), bool):
+        settings["include_audio"] = data["include_audio"]
+    if "cookie_browser" in data and data["cookie_browser"] in COOKIE_BROWSERS:
+        settings["cookie_browser"] = data["cookie_browser"]
+    if data.get("drive") in AVAILABLE_DRIVES:
+        settings["drive"] = data["drive"]
+    if isinstance(data.get("custom_path"), str) and data["custom_path"].strip():
+        settings["custom_path"] = data["custom_path"]
+    return settings
+
+
+def save_settings(settings: dict) -> None:
+    """เขียนแบบ atomic (เขียนไฟล์ชั่วคราวก่อนแล้วค่อยสลับ) กันไฟล์พังตอนปิดโปรแกรมกลางคัน"""
+    tmp = SETTINGS_FILE.with_suffix(".json.tmp")
+    try:
+        tmp.write_text(json.dumps(settings, indent=4, ensure_ascii=False),
+                       encoding="utf-8")
+        os.replace(tmp, SETTINGS_FILE)
+    except OSError as exc:
+        print(f"{YELLOW}⚠️  Cannot save settings: {exc}{RESET}")
+
+
+# ============================================================
+# [CUSTOM PATH] เลือกโฟลเดอร์ดาวน์โหลดเอง
+# ============================================================
+def validate_custom_path(raw: str) -> Path:
+    """แปลงข้อความเป็น Path ที่ใช้งานได้จริง (สร้างโฟลเดอร์ให้ถ้ายังไม่มี) หรือ raise OSError"""
+    raw = raw.strip().strip('"').strip("'")     # รองรับ drag&drop / copy as path
+    if not raw:
+        raise OSError("empty path")
+    p = Path(os.path.expandvars(os.path.expanduser(raw))).resolve()
+    if p.exists() and not p.is_dir():
+        raise OSError(f"'{p}' is a file, not a folder")
+    p.mkdir(parents=True, exist_ok=True)
+    if not os.access(p, os.W_OK):
+        raise OSError(f"no write permission: {p}")
+    return p
+
+
+def resolve_download_path(settings: dict) -> Path:
+    """custom_path (ถ้ามี) > <Drive>:/Downloads ; ถ้า custom ใช้ไม่ได้ให้ fallback อัตโนมัติ"""
+    if settings.get("custom_path"):
+        try:
+            return validate_custom_path(settings["custom_path"])
+        except OSError as exc:
+            print(f"{YELLOW}⚠️  Saved custom path unusable ({exc}) → back to default{RESET}")
+            settings["custom_path"] = None
+            save_settings(settings)
+    return get_download_path(settings["drive"])
+
+
+def prompt_custom_path(settings: dict) -> bool:
+    """ถามพาธใหม่ จาก user → คืน True ถ้ามีการเปลี่ยนค่า"""
+    print()
+    print(f"  {BOLD}📁 Custom download path{RESET}")
+    print(f"  {DIM}• Paste / drag a folder here, e.g.  D:\\Videos\\YT   or   ~/Movies/YT{RESET}")
+    print(f"  {DIM}• Type 'd' = back to default Downloads | Enter (empty) = cancel{RESET}")
+    try:
+        raw = input("  Path: ").strip()
+    except EOFError:
+        return False
+
+    if not raw:
+        print(f"  {DIM}Cancelled.{RESET}")
+        return False
+    if raw.lower() in ("d", "default", "ด"):
+        settings["custom_path"] = None
+        return True
+    try:
+        new_path = validate_custom_path(raw)
+    except OSError as exc:
+        print(f"  {RED}❌ Cannot use this path: {exc}{RESET}")
+        return False
+    settings["custom_path"] = str(new_path)
+    return True
 
 
 def get_unique_output(download_path: Path, base_name: str, ext: str = ".m4a") -> Path:
@@ -475,7 +581,8 @@ def print_link(url, label=None):
 # ============================================================
 # [UI]
 # ============================================================
-def mode_bar(current_mode: str, include_audio: bool, cookie_browser: str | None, current_drive: str):
+def mode_bar(current_mode: str, include_audio: bool, cookie_browser: str | None,
+             download_path: Path, is_custom: bool):
     def row(num, key):
         info = MODE_INFO[key]
         if key == current_mode:
@@ -491,7 +598,11 @@ def mode_bar(current_mode: str, include_audio: bool, cookie_browser: str | None,
     else:
         js_txt = f"{RED}⚙️  NOT FOUND (downloads may fail){RESET}"
 
-    print(f"     (S) Save to Drive: {GREEN}{current_drive}:\\Downloads{RESET}")   # <-- เพิ่มบรรทัดนี้
+    if is_custom:
+        print(f"     (P) Save to: {MAGENTA}{download_path}{RESET} {DIM}[custom]{RESET}")
+    else:
+        print(f"     (S) Save to: {GREEN}{download_path}{RESET}")
+    print(f"     {DIM}(S) switch drive | (P) custom path{RESET}")
     print()
     print(f"  {BOLD}────────────── Select Mode (Then press Enter) ──────────────{RESET}")
     print(row('1', MODE_M4A))
@@ -505,7 +616,8 @@ def mode_bar(current_mode: str, include_audio: bool, cookie_browser: str | None,
     print()
 
 
-def at_start(current_mode: str, include_audio: bool, cookie_browser: str | None, current_drive: str):
+def at_start(current_mode: str, include_audio: bool, cookie_browser: str | None,
+             download_path: Path, is_custom: bool):
     _yt_media = [
         "  ██╗   ██╗  ██████╗  ██╗   ██╗ ████████╗ ██╗   ██╗ ██████╗   ███████╗      ███╗   ███╗ ███████╗ ██████╗  ██╗  █████╗ ",
         "  ╚██╗██╔╝  ██╔═══██╗ ██║   ██║ ╚══██╔══╝ ██║   ██║ ██╔══██╗  ██╔════╝      ████╗ ████║ ██╔════╝ ██╔══██╗ ██║ ██╔══██╗",
@@ -530,12 +642,12 @@ def at_start(current_mode: str, include_audio: bool, cookie_browser: str | None,
     for line in _downloader:
         print(f"{YELLOW}{line}{RESET}")
     print()
-    print(f"  {DIM}Developed by Phakin Charatsri (GOAT FILM & CS32 KMITL) | PATCH 27.09.2026.{RESET}")
-    print(f"  [ Patch 27.9.2026 ] - New Feature, you can change Drive Path\n                      for example (Press S Enter to Switch Drive) C: D: ... etc. **in Downloads Folder. ")
+    print(f"  {DIM}Developed by Phakin Charatsri (GOAT FILM & CS32 KMITL) | PATCH 28.09.2026.{RESET}")
+    print(f"  [ New ] - (P) Custom Path: choose any folder | Settings are auto-saved to settings.json")
     print()
-    print(f"  {DIM}Commands: (Q) Quit | (R) Reset | (F) Open Folder | (S) Switch Drive | (Ctrl+V) Paste Link | (67) | (G) GOAT{RESET}")
+    print(f"  {DIM}Commands: (Q) Quit | (R) Reset | (F) Open Folder | (S) Switch Drive | (P) Custom Path | (Ctrl+V) Paste Link | (67) | (G) GOAT{RESET}")
     print()
-    mode_bar(current_mode, include_audio, cookie_browser, current_drive)
+    mode_bar(current_mode, include_audio, cookie_browser, download_path, is_custom)
 
 # ============================================================
 # [MAIN]
@@ -559,16 +671,26 @@ def super_fast_downloader():
             print(f"   Required structure: {BOLD}<project>/tools/windows/ffmpeg/bin/ffmpeg.exe{RESET}")
         return
     
-    drive_idx = 0
-    current_drive = AVAILABLE_DRIVES[drive_idx]
-    download_path = get_download_path(current_drive)
-    current_mode = MODE_MP4_1080
-    include_audio = True
-    cookie_idx = 0
-    cookie_browser = COOKIE_BROWSERS[cookie_idx]
+    settings = load_settings()
+    drive_idx = AVAILABLE_DRIVES.index(settings["drive"])
+    current_drive = settings["drive"]
+    download_path = resolve_download_path(settings)
+    current_mode = settings["mode"]
+    include_audio = settings["include_audio"]
+    cookie_browser = settings["cookie_browser"]
+    cookie_idx = COOKIE_BROWSERS.index(cookie_browser)
 
+    def persist():
+        settings.update({
+            "mode": current_mode,
+            "include_audio": include_audio,
+            "cookie_browser": cookie_browser,
+            "drive": current_drive,
+        })
+        save_settings(settings)
 
-    at_start(current_mode, include_audio, cookie_browser, current_drive)
+    at_start(current_mode, include_audio, cookie_browser, download_path,
+             bool(settings["custom_path"]))
     print(f"{DIM}  Loading modules...{RESET}", end="\r")
     try:
         import yt_dlp  # noqa: F401
@@ -583,7 +705,8 @@ def super_fast_downloader():
 
     def refresh_ui():
         os.system('cls' if os.name == 'nt' else 'clear')
-        at_start(current_mode, include_audio, cookie_browser, current_drive) 
+        at_start(current_mode, include_audio, cookie_browser, download_path,
+                 bool(settings["custom_path"]))
 
     while True:
         info = MODE_INFO[current_mode]
@@ -620,33 +743,47 @@ def super_fast_downloader():
         # ---- [MODE] ----
         elif cmd == '1':
             current_mode = MODE_M4A
+            persist()
             refresh_ui()
             continue
         elif cmd == '2':
             current_mode = MODE_MP4_1080
+            persist()
             refresh_ui()
             continue
         elif cmd == '3':
             current_mode = MODE_MP4_MAX
+            persist()
             refresh_ui()
             continue
         elif cmd == '4':
             current_mode = MODE_THUMB
+            persist()
             refresh_ui()
             continue
         elif cmd in ('s', 'ห'):
             drive_idx = (drive_idx + 1) % len(AVAILABLE_DRIVES)
             current_drive = AVAILABLE_DRIVES[drive_idx]
+            settings["custom_path"] = None          # สลับ Drive = กลับไปใช้ <Drive>:/Downloads
             download_path = get_download_path(current_drive)
+            persist()
             refresh_ui()
+            continue
+        elif cmd in ('p', 'ย'):
+            if prompt_custom_path(settings):
+                download_path = resolve_download_path(settings)
+                persist()
+                refresh_ui()
             continue
         elif cmd in ('a', 'ฟ'):
             include_audio = not include_audio
+            persist()
             refresh_ui()
             continue
         elif cmd in ('c', 'แ'):
             # cookie_idx = (cookie_idx + 1) % len(COOKIE_BROWSERS)
             # cookie_browser = COOKIE_BROWSERS[cookie_idx]
+            # persist()
             # refresh_ui()
             # if cookie_browser:
             #     print(f"  {YELLOW}⚠️  Close {cookie_browser} before downloading, "
